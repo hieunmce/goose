@@ -4,9 +4,11 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -139,6 +141,99 @@ func AddNamedMigration(filename string, up func(*sql.Tx) error, down func(*sql.T
 	}
 
 	registeredGoMigrations[v] = migration
+}
+
+// Avoids pulling in the packr library for everyone, mimicks the bits of
+// packr.Box that we need.
+type PackrBox interface {
+	List() []string
+	Find(name string) ([]byte, error)
+}
+
+// Migrations from a packr box.
+type PackrMigrationSource struct {
+	Box PackrBox
+
+	// Path in the box to use.
+	Dir string
+}
+
+func (p PackrMigrationSource) FindMigrations(current, target int64) ([]*Migration, error) {
+	items := p.Box.List()
+
+	prefix := ""
+	dir := path.Clean(p.Dir)
+	if dir != "." {
+		prefix = fmt.Sprintf("%s/", dir)
+	}
+
+	var migrations Migrations
+	// var sqlMigrationFiles
+	for _, item := range items {
+		if !strings.HasPrefix(item, prefix) {
+			continue
+		}
+		name := strings.TrimPrefix(item, prefix)
+		if strings.Contains(name, "/") {
+			continue
+		}
+
+		if strings.HasSuffix(name, ".sql") {
+			v, err := NumericComponent(name)
+			if err != nil {
+				return nil, err
+			}
+
+			file, err := p.Box.Find(item)
+			if err != nil {
+				return nil, err
+			}
+
+			if versionFilter(v, current, target) {
+				migration := &Migration{
+					Version: v,
+					Next:    -1, Previous: -1,
+					Source:      name,
+					File:        file,
+					HaveFileBuf: true,
+				}
+				migrations = append(migrations, migration)
+			}
+		}
+
+		// Go migration files
+		if strings.HasSuffix(name, ".go") {
+			v, err := NumericComponent(name)
+			if err != nil {
+				continue // Skip any files that don't have version prefix.
+			}
+
+			// Skip migrations already existing migrations registered via goose.AddMigration().
+			if _, ok := registeredGoMigrations[v]; ok {
+				continue
+			}
+
+			if versionFilter(v, current, target) {
+				migration := &Migration{Version: v, Next: -1, Previous: -1, Source: name, Registered: false}
+				migrations = append(migrations, migration)
+			}
+		}
+	}
+
+	// Go migrations registered via goose.AddMigration().
+	for _, migration := range registeredGoMigrations {
+		v, err := NumericComponent(migration.Source)
+		if err != nil {
+			return nil, err
+		}
+		if versionFilter(v, current, target) {
+			migrations = append(migrations, migration)
+		}
+	}
+
+	migrations = sortAndConnectMigrations(migrations)
+
+	return migrations, nil
 }
 
 // CollectMigrations returns all the valid looking migration scripts in the
