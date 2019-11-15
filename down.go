@@ -54,3 +54,33 @@ func DownTo(db *sql.DB, dir string, version int64) error {
 		}
 	}
 }
+
+// DownToMinByPackrSource applies all available migrations.using packr source
+func DownToMinByPackrSource(db *sql.DB, source *PackrMigrationSource) error {
+	migrations, err := source.FindMigrations(minVersion, maxVersion)
+	if err != nil {
+		return err
+	}
+
+	for {
+		currentVersion, err := GetDBVersion(db)
+		if err != nil {
+			return err
+		}
+
+		current, err := migrations.Current(currentVersion)
+		if err != nil {
+			log.Printf("goose: no migrations to run. current version: %d\n", currentVersion)
+			return nil
+		}
+
+		if current.Version <= minVersion {
+			log.Printf("goose: no migrations to run. current version: %d\n", currentVersion)
+			return nil
+		}
+
+		if err = current.Down(db); err != nil {
+			return err
+		}
+	}
+}

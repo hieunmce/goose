@@ -37,8 +37,8 @@ func Up(db *sql.DB, dir string) error {
 	return UpTo(db, dir, maxVersion)
 }
 
-// UpByPacrkSource applies all available migrations.using packr source
-func UpByPacrkSource(db *sql.DB, source *PackrMigrationSource) error {
+// UpByPackrSource applies all available migrations.using packr source
+func UpByPackrSource(db *sql.DB, source *PackrMigrationSource) error {
 	migrations, err := source.FindMigrations(minVersion, maxVersion)
 	if err != nil {
 		return err
