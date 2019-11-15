@@ -37,6 +37,35 @@ func Up(db *sql.DB, dir string) error {
 	return UpTo(db, dir, maxVersion)
 }
 
+// UpByPacrkSource applies all available migrations.using packr source
+func UpByPacrkSource(db *sql.DB, source *PackrMigrationSource) error {
+	migrations, err := source.FindMigrations(minVersion, maxVersion)
+	if err != nil {
+		return err
+	}
+
+	for {
+		current, err := GetDBVersion(db)
+		if err != nil {
+			return err
+		}
+
+		next, err := migrations.Next(current)
+		if err != nil {
+			if err == ErrNoNextVersion {
+				log.Printf("goose: no migrations to run. current version: %d\n", current)
+				return nil
+			}
+			return err
+		}
+
+		if err = next.Up(db); err != nil {
+			return err
+		}
+	}
+
+}
+
 // UpByOne migrates up by a single version.
 func UpByOne(db *sql.DB, dir string) error {
 	migrations, err := CollectMigrations(dir, minVersion, maxVersion)

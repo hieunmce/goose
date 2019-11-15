@@ -158,7 +158,8 @@ type PackrMigrationSource struct {
 	Dir string
 }
 
-func (p PackrMigrationSource) FindMigrations(current, target int64) ([]*Migration, error) {
+// FindMigrations using packr source
+func (p *PackrMigrationSource) FindMigrations(current, target int64) (Migrations, error) {
 	items := p.Box.List()
 
 	prefix := ""
