@@ -1,4 +1,4 @@
-module github.com/pressly/goose
+module github.com/hieunmce/goose
 
 go 1.12
 
